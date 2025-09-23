@@ -13,37 +13,28 @@ type HealthRecord = {
     recordID: string;
 };
 
-// const initialNodes: Node[] = [
-//   { id: 'peer1', position: { x: 100, y: 200 }, data: { label: 'Peer 0 (Org1)' }, style: { background: '#0ea5e9', color: 'white', border: 'none' }, 
-//     sourcePosition: Position.Bottom, targetPosition: Position.Top }, // NEW
-//   { id: 'peer2', position: { x: 500, y: 200 }, data: { label: 'Peer 0 (Org2)' }, style: { background: '#10b981', color: 'white', border: 'none' }, 
-//     sourcePosition: Position.Bottom, targetPosition: Position.Top }, // NEW
-//   { id: 'orderer', position: { x: 300, y: 400 }, data: { label: 'Orderer' }, style: { background: '#a855f7', color: 'white', border: 'none' },
-//     sourcePosition: Position.Bottom, targetPosition: Position.Top }, // NEW
-//   { id: 'ca1', position: { x: 100, y: 0 }, data: { label: 'Org1 CA' }, type: 'input', style: { background: '#64748b', color: 'white', border: 'none' },
-//     targetPosition: Position.Bottom }, // NEW
-//   { id: 'ca2', position: { x: 500, y: 0 }, data: { label: 'Org2 CA' }, type: 'input', style: { background: '#64748b', color: 'white', border: 'none' },
-//     targetPosition: Position.Bottom }, // NEW
-// ];
-
-// const initialEdges: Edge[] = [
-//     { id: 'ca1-peer1', source: 'ca1', target: 'peer1', animated: true },
-//     { id: 'ca2-peer2', source: 'ca2', target: 'peer2', animated: true },
-//     { id: 'peer1-orderer', source: 'peer1', target: 'orderer', type: 'step' },
-//     { id: 'peer2-orderer', source: 'peer2', target: 'orderer', type: 'step' },
-// ];
+// --- STATIC NETWORK DEFINITION ---
+const initialNodes: Node[] = [
+    { id: 'peer1', position: { x: 100, y: 200 }, data: { label: 'Peer 0 (Org1)' }, style: { background: '#0ea5e9', color: 'white', border: 'none' } },
+    { id: 'peer2', position: { x: 500, y: 200 }, data: { label: 'Peer 0 (Org2)' }, style: { background: '#10b981', color: 'white', border: 'none' } },
+    { id: 'orderer', position: { x: 300, y: 400 }, data: { label: 'Orderer' }, style: { background: '#a855f7', color: 'white', border: 'none' } },
+    { id: 'ca1', position: { x: 100, y: 0 }, data: { label: 'Org1 CA' }, type: 'input', style: { background: '#64748b', color: 'white', border: 'none' } },
+    { id: 'ca2', position: { x: 500, y: 0 }, data: { label: 'Org2 CA' }, type: 'input', style: { background: '#64748b', color: 'white', border: 'none' } },
+];
+const initialEdges: Edge[] = [
+    { id: 'ca1-peer1', source: 'ca1', target: 'peer1', animated: true },
+    { id: 'ca2-peer2', source: 'ca2', target: 'peer2', animated: true },
+    { id: 'peer1-orderer', source: 'peer1', target: 'orderer', type: 'step' },
+    { id: 'peer2-orderer', source: 'peer2', target: 'orderer', type: 'step' },
+];
 
 export default function VisualizerPage() {
     const [lastEvent, setLastEvent] = useState<any>(null);
     const [isAnimating, setIsAnimating] = useState(false);
     const [socketStatus, setSocketStatus] = useState('Connecting...');
 
-    // const [nodes, setNodes] = useState<Node[]>(initialNodes);
-    // const [edges, setEdges] = useState<Edge[]>(initialEdges);
-    const [baseNodes, setBaseNodes] = useState<Node[]>([]);
-    const [baseEdges, setBaseEdges] = useState<Edge[]>([]);
-    const [nodes, setNodes] = useState<Node[]>([]);
-    const [edges, setEdges] = useState<Edge[]>([]);
+    const [nodes, setNodes] = useState<Node[]>(initialNodes);
+    const [edges, setEdges] = useState<Edge[]>(initialEdges);
 
     const packetControls = useAnimation();
     const nodeControls = useAnimation();
@@ -117,20 +108,12 @@ export default function VisualizerPage() {
         });
     };
 
-    const upsertById = useCallback(<T extends { id: string }>(prev: T[], next: T[]) => {
-        const map = new Map(prev.map((e) => [e.id, e]));
-        next.forEach((e) => map.set(e.id, e));
-        return Array.from(map.values());
-    }, []);
-
-
-    const updateGraphWithRecords = async (networkNodes: Node[], networkEdges: Edge[]) => {
+    const updateGraphWithRecords = async () => {
         try {
             const response = await fetch('/api/records');
             const records: HealthRecord[] = await response.json();
             if (!response.ok) throw new Error('Failed to fetch records.');
 
-            
             const recordNodes: Node[] = records.map((record, index) => ({
                 id: record.recordID,
                 data: { label: `Record: ${record.recordID}` },
@@ -138,55 +121,48 @@ export default function VisualizerPage() {
                 style: { background: '#f97316', color: 'white', border: '1px solid white', borderRadius: '100%' },
                 type: 'output'
             }));
-
-            const recordEdges: Edge[] = records.flatMap(record =>
-                networkNodes.filter(n => n.id.startsWith('peer')).map(peerNode => ({
-                    id: `edge-${record.recordID}-${peerNode.id}`,
-                    source: record.recordID,
-                    target: peerNode.id,
-                    type: 'smoothstep',
-                    animated: false,
-                    style: { stroke: '#f97316' }
-                }))
-            );
-
-            setNodes([...networkNodes, ...recordNodes]);
-            setEdges([...networkEdges, ...recordEdges]);
+            
+            // --- FIXED: Create edges to connect permanent records to peers ---
+            const recordEdges: Edge[] = records.flatMap(record => [
+                { id: `edge-${record.recordID}-p1`, source: record.recordID, target: 'peer1', type: 'smoothstep', animated: false, style: { stroke: '#f97316' } },
+                { id: `edge-${record.recordID}-p2`, source: record.recordID, target: 'peer2', type: 'smoothstep', animated: false, style: { stroke: '#f97316' } },
+            ]);
+            
+            setNodes([...initialNodes, ...recordNodes]);
+            setEdges([...initialEdges, ...recordEdges]);
         } catch (error) {
             console.error((error as Error).message);
         }
     };
 
     useEffect(() => {
+        updateGraphWithRecords();
         const socket = new WebSocket('ws://localhost:8082');
         socket.onopen = () => setSocketStatus('Connected');
         socket.onclose = () => setSocketStatus('Disconnected');
         socket.onerror = () => setSocketStatus('Error');
-
+        
         socket.onmessage = async (event) => {
             const data = JSON.parse(event.data);
-            if (data.type === 'NETWORK_MAP_UPDATE') {
-                const newBaseNodes = data.payload.nodes;
-                const newBaseEdges = data.payload.edges;
-                setBaseNodes(newBaseNodes);
-                setBaseEdges(newBaseEdges);
-                // Update the full graph with the new base map and existing records
-                await updateGraphWithRecords(newBaseNodes, newBaseEdges);
-            }
-            
             if (data.type === 'NEW_TRANSACTION') {
                 setIsAnimating(true);
                 setLastEvent(data);
+                
+                // --- THE NEW VISUAL SEQUENCE ---
+                // 1. Run the helix animation and wait for it to finish.
                 await startAnimationSequence();
+                
+                // 2. Run the temporary "TX" node animation on the graph.
                 await animateTransactionOnGraph(data.txId);
-                // After animation, refresh the records on the graph
-                await updateGraphWithRecords(baseNodes, baseEdges);
+
+                // 3. Finally, update the graph with the permanent record node.
+                await updateGraphWithRecords();
                 setIsAnimating(false);
             }
         };
 
         return () => socket.close();
-    }, [baseNodes, baseEdges]);
+    }, []);
 
     const handleTestTransaction = async () => {
         if (isAnimating) return;

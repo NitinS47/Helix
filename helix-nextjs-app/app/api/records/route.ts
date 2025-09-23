@@ -12,11 +12,13 @@ export async function GET() {
     try {
         const contract = await getContract(gateway);
         
-        console.log('Evaluating GetAllRecords transaction');
         const resultBytes = await contract.evaluateTransaction('GetAllRecords');
         
+        const resultJsonString = new TextDecoder().decode(resultBytes);
+        
+        const parsedData = JSON.parse(resultJsonString);
+
         const resultJson = utf8Decoder.decode(resultBytes);
-        console.log('GetAllRecords query result:', resultJson);
 
         return NextResponse.json(JSON.parse(resultJson));
     } catch (error) {

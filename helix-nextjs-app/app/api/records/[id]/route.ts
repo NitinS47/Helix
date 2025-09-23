@@ -11,15 +11,32 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     try {
         const contract = await getContract(gateway);
         
-        console.log(`Evaluating QueryHealthRecord for ${recordId}`);
         const resultBytes = await contract.evaluateTransaction('QueryHealthRecord', recordId);
         
         const resultJson = utf8Decoder.decode(resultBytes);
-        console.log('Query result:', resultJson);
 
         return NextResponse.json(JSON.parse(resultJson));
     } catch (error) {
         console.error('Failed to evaluate transaction:', error);
+        return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    } finally {
+        client.close();
+    }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+    const recordId = params.id;
+    console.log(`Received request to delete record ${recordId}`);
+    
+    const { gateway, client } = await connectToGateway();
+    try {
+        const contract = await getContract(gateway);
+
+        await contract.submitTransaction('DeleteRecord', recordId);
+
+        return NextResponse.json({ message: `Record ${recordId} has been deleted` });
+    } catch (error) {
+        console.error('Failed to submit transaction:', error);
         return NextResponse.json({ error: (error as Error).message }, { status: 500 });
     } finally {
         client.close();

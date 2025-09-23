@@ -2,7 +2,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiPlus, FiChevronDown, FiX } from 'react-icons/fi';
+import { FiPlus, FiChevronDown, FiX, FiTrash2 } from 'react-icons/fi';
 
 // Define a type for our Health Record for TypeScript
 type HealthRecord = {
@@ -22,7 +22,7 @@ export default function HomePage() {
   const [newPatientID, setNewPatientID] = useState('');
   
   // State for modals and actions
-  const [modal, setModal] = useState<'grant' | 'revoke' | 'history' | null>(null);
+  const [modal, setModal] = useState<'grant' | 'revoke' | 'history' | 'delete' | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<HealthRecord | null>(null);
   const [granteeID, setGranteeID] = useState('');
   const [history, setHistory] = useState<any[]>([]);
@@ -40,9 +40,13 @@ export default function HomePage() {
     setIsLoading(true);
     try {
       const response = await fetch('/api/records');
-      const data = await response.json();
+
+      const rawText = await response.text(); // Get raw text first
+
+      const data = JSON.parse(rawText); // Manually parse it now
+
       if (!response.ok) throw new Error(data.error || 'Failed to fetch records.');
-      setRecords(data);
+      setRecords(Array.isArray(data) ? data : []);
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -78,7 +82,7 @@ export default function HomePage() {
     }
   };
   
-  const handleAction = async (action: 'grant' | 'revoke' | 'history', record: HealthRecord) => {
+  const handleAction = async (action: 'grant' | 'revoke' | 'history' | 'delete', record: HealthRecord) => {
     setSelectedRecord(record);
     setModal(action);
     setMessage('');
@@ -126,6 +130,26 @@ export default function HomePage() {
     setSelectedRecord(null);
     setGranteeID('');
     setHistory([]);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedRecord) return;
+    setIsLoading(true);
+    setMessage('');
+    try {
+      const response = await fetch(`/api/records/${selectedRecord.recordID}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to delete record.');
+      setMessage(data.message);
+      fetchAllRecords(); // Refresh the dashboard
+      closeModal();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const containerVariants = {
@@ -177,9 +201,6 @@ export default function HomePage() {
         >
           <motion.div variants={itemVariants} className="glass-card p-6 rounded-2xl shadow-2xl">
             <form onSubmit={handleCreate} className="flex flex-wrap items-center gap-4">
-              <h2 className="text-xl font-bold text-white w-full md:w-auto mb-4 md:mb-0">
-                <FiPlus className="inline mr-2" />Create Record
-              </h2>
               <input type="text" placeholder="Record ID" value={newRecordID} onChange={(e) => setNewRecordID(e.target.value)} className="bg-gray-900/50 p-3 border border-cyan-400/20 rounded-lg flex-grow" required />
               <input type="text" placeholder="Patient ID" value={newPatientID} onChange={(e) => setNewPatientID(e.target.value)} className="bg-gray-900/50 p-3 border border-cyan-400/20 rounded-lg flex-grow" required />
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} type="submit" disabled={isLoading} className="bg-cyan-400 text-gray-900 font-bold p-3 rounded-lg w-full md:w-auto disabled:bg-gray-600">
@@ -195,18 +216,31 @@ export default function HomePage() {
                   <tr className="border-b border-cyan-400/20"><th className="p-4">Record ID</th><th className="p-4">Patient ID</th><th className="p-4 hidden md:table-cell">Actions</th></tr>
                 </thead>
                 <tbody>
-                  {records.map((record) => (
-                    <motion.tr key={record.recordID} variants={itemVariants} className="border-b border-gray-700/50 hover:bg-gray-900/50 transition-colors">
-                      <td className="p-4 font-mono">{record.recordID}</td><td className="p-4">{record.patientID}</td>
-                      <td className="p-4">
-                        <div className="flex space-x-2">
-                           <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleAction('grant', record)} className="bg-green-500/80 px-3 py-1 rounded-md text-sm">Grant</motion.button>
-                           <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleAction('revoke', record)} className="bg-red-500/80 px-3 py-1 rounded-md text-sm">Revoke</motion.button>
-                           <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleAction('history', record)} className="bg-gray-500/80 px-3 py-1 rounded-md text-sm">History</motion.button>
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))}
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={3} className="text-center p-4">Loading Records...</td>
+                    </tr>
+                   ) : records.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="p-4 text-center text-gray-500">No records found.</td>
+                    </tr>
+                  ) : (
+                    records.map((record) => (
+                      <tr key={record.recordID} className="border-b border-gray-700/50 hover:bg-gray-900/50 transition-colors">
+                        <td className="p-4 font-mono text-gray-200">{record.recordID}</td><td className="p-4 text-gray-200">{record.patientID}</td>
+                        <td className="p-4 ">
+                          <div className="flex space-x-2">
+                            <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleAction('grant', record)} className="bg-green-500/80 px-3 py-1 rounded-md text-sm">Grant</motion.button>
+                            <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleAction('revoke', record)} className="bg-red-500/80 px-3 py-1 rounded-md text-sm">Revoke</motion.button>
+                            <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleAction('history', record)} className="bg-gray-500/80 px-3 py-1 rounded-md text-sm">History</motion.button>
+                            <motion.button whileHover={{ scale: 1.1 }} onClick={() => handleAction('delete', record)} className="bg-yellow-600/80 p-2 rounded-full text-sm">
+                                <FiTrash2 />
+                             </motion.button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -219,8 +253,22 @@ export default function HomePage() {
         {modal && selectedRecord && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
             <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} className="glass-card rounded-2xl shadow-2xl p-6 w-full max-w-2xl border-cyan-400/30">
-              <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-white capitalize">{modal} Details for <span className="font-mono text-cyan-400">{selectedRecord.recordID}</span></h3><motion.button whileHover={{ scale: 1.2, rotate: 90 }} onClick={closeModal}><FiX size={24} /></motion.button></div>
-              {modal === 'history' ? (
+              {/* --- NEW: Delete Confirmation Modal --- */}
+              {modal === 'delete' ? (
+                <div className="space-y-4 text-center">
+                  <h3 className="text-xl font-bold text-white">Confirm Deletion</h3>
+                  <p className="text-gray-300">
+                    Are you sure you want to delete record <span className="font-mono text-yellow-400">{selectedRecord.recordID}</span>?
+                    This action cannot be undone, but its history will be preserved on the ledger.
+                  </p>
+                  <div className="flex justify-end space-x-4 pt-4">
+                    <motion.button onClick={closeModal} className="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancel</motion.button>
+                    <motion.button onClick={handleDeleteConfirm} disabled={isLoading} className="bg-red-600 text-white font-bold py-2 px-4 rounded-lg">
+                      {isLoading ? 'Deleting...' : 'Confirm Delete'}
+                    </motion.button>
+                  </div>
+                </div>
+              ) : modal === 'history' ? (
                 <pre className="bg-gray-900/70 text-cyan-300 text-xs p-4 rounded-lg overflow-auto max-h-96">{isLoading ? 'Loading History...' : JSON.stringify(history, null, 2)}</pre>
               ) : (
                 <div className="space-y-4">
