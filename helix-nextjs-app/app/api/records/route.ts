@@ -1,7 +1,33 @@
 // app/api/records/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToGateway, getContract } from '../../../lib/fabric';
+import { TextDecoder } from 'util';
 
+const utf8Decoder = new TextDecoder();
+
+// --- NEW GET FUNCTION ---
+export async function GET() {
+    console.log('Received request to get all records');
+    const { gateway, client } = await connectToGateway();
+    try {
+        const contract = await getContract(gateway);
+        
+        console.log('Evaluating GetAllRecords transaction');
+        const resultBytes = await contract.evaluateTransaction('GetAllRecords');
+        
+        const resultJson = utf8Decoder.decode(resultBytes);
+        console.log('GetAllRecords query result:', resultJson);
+
+        return NextResponse.json(JSON.parse(resultJson));
+    } catch (error) {
+        console.error('Failed to evaluate transaction:', error);
+        return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    } finally {
+        client.close();
+    }
+}
+
+// --- EXISTING POST FUNCTION (No changes needed) ---
 export async function POST(req: NextRequest) {
     const { gateway, client } = await connectToGateway();
     try {

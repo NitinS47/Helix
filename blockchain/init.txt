@@ -2,6 +2,11 @@
 
 2. ./network.sh deployCC -ccn helixcc -ccp ../chaincode/helix/ -ccl go
 
+2a. cd bin
+2b. export PATH=${PWD}:$PATH
+2c. cd test-network
+2d. export FABRIC_CFG_PATH=../config/
+
 3. # Set the Org1 environment
 export CORE_PEER_TLS_ENABLED=true
 export CORE_PEER_LOCALMSPID="Org1MSP"
@@ -45,3 +50,13 @@ peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.exa
 10. # Switch terminal identity back to Org2
 
 11. # Re-run Query Record_001
+
+-----------------------
+
+npm install @hyperledger/fabric-gateway @grpc/grpc-js
+npm install framer-motion react-icons
+npx tsc listeners/blockListener.ts
+node listeners/blockListener.js
+npm install ws
+npm install -D @types/ws
+npm install reactflow
