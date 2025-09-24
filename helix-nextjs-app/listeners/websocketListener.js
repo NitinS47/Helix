@@ -35,110 +35,221 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 // listeners/websocketListener.ts
 var fabric_network_1 = require("fabric-network");
 var path = require("path");
 var fs = require("fs");
 var ws_1 = require("ws");
-// Define the port for our WebSocket server
+// END OF CHANGES
 var WEBSOCKET_PORT = 8082;
-// 1. Set up the WebSocket Server
+// --- WebSocket Server Setup ---
 var wss = new ws_1.WebSocketServer({ port: WEBSOCKET_PORT });
 console.log("\u2705 WebSocket server started on ws://localhost:".concat(WEBSOCKET_PORT));
-// A simple broadcast function to send data to all connected clients
-function broadcast(data) {
-    var message = JSON.stringify(data);
-    console.log("Broadcasting message to ".concat(wss.clients.size, " clients: ").concat(message));
-    wss.clients.forEach(function (client) {
-        if (client.readyState === client.OPEN) {
-            client.send(message);
-        }
+// --- Global State Management ---
+var gateway;
+var networkNodes = [];
+var networkEdges = [];
+/**
+ * The single source of truth function. It gets the current network map,
+ * fetches all records from the ledger, combines them, and broadcasts
+ * the complete graph state to all connected clients.
+ */
+function broadcastFullGraphState() {
+    return __awaiter(this, void 0, void 0, function () {
+        var network, contract, resultBytes, records, recordNodes, recordEdges, fullNodes, fullEdges, message_1, error_1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    if (!gateway) {
+                        console.log('Gateway not connected. Skipping broadcast.');
+                        return [2 /*return*/];
+                    }
+                    console.log('🔄 Recalculating and broadcasting full graph state...');
+                    _a.label = 1;
+                case 1:
+                    _a.trys.push([1, 4, , 5]);
+                    return [4 /*yield*/, gateway.getNetwork('mychannel')];
+                case 2:
+                    network = _a.sent();
+                    contract = network.getContract('helixcc');
+                    return [4 /*yield*/, contract.evaluateTransaction('GetAllRecords')];
+                case 3:
+                    resultBytes = _a.sent();
+                    records = JSON.parse(Buffer.from(resultBytes).toString('utf8'));
+                    recordNodes = records.map(function (record, index) { return ({
+                        id: record.RecordID,
+                        data: { label: "Record: ".concat(record.RecordID) },
+                        position: { x: 150 + (index * 120), y: 550 },
+                        style: { background: '#f97316', color: 'white', border: '1px solid white', borderRadius: '100%' },
+                        type: 'output'
+                    }); });
+                    recordEdges = records.flatMap(function (record) {
+                        return networkNodes.filter(function (n) { return n.id.startsWith('peer'); }).map(function (peerNode) { return ({
+                            id: "edge-".concat(record.RecordID, "-").concat(peerNode.id),
+                            source: record.RecordID,
+                            target: peerNode.id,
+                            type: 'smoothstep',
+                            style: { stroke: '#f97316' }
+                        }); });
+                    });
+                    fullNodes = __spreadArray(__spreadArray([], networkNodes, true), recordNodes, true);
+                    fullEdges = __spreadArray(__spreadArray([], networkEdges, true), recordEdges, true);
+                    message_1 = JSON.stringify({
+                        type: 'GRAPH_UPDATE',
+                        payload: { nodes: fullNodes, edges: fullEdges }
+                    });
+                    // 5. Broadcast to all clients.
+                    wss.clients.forEach(function (client) {
+                        if (client.readyState === client.OPEN) {
+                            client.send(message_1);
+                        }
+                    });
+                    console.log("Broadcast complete. Sent graph with ".concat(fullNodes.length, " nodes."));
+                    return [3 /*break*/, 5];
+                case 4:
+                    error_1 = _a.sent();
+                    console.error('🔴 Error broadcasting full graph state:', error_1);
+                    return [3 /*break*/, 5];
+                case 5: return [2 /*return*/];
+            }
+        });
     });
 }
-wss.on('connection', function (ws) {
-    console.log('🔗 New client connected.');
-    ws.on('close', function () {
-        console.log('✖️ Client disconnected.');
+/**
+ * Connects to the Fabric network and discovers its topology (peers, orderers).
+ */
+function discoverNetwork() {
+    return __awaiter(this, void 0, void 0, function () {
+        var network, channel, discoveryService, endorsingPeers, discoveryRequest, discoveryResult, nodes_1, edges_1, peers, orderers, error_2;
+        var _a, _b, _c;
+        return __generator(this, function (_d) {
+            switch (_d.label) {
+                case 0:
+                    if (!gateway)
+                        return [2 /*return*/];
+                    _d.label = 1;
+                case 1:
+                    _d.trys.push([1, 5, , 6]);
+                    console.log('🔍 Performing network discovery...');
+                    return [4 /*yield*/, gateway.getNetwork('mychannel')];
+                case 2:
+                    network = _d.sent();
+                    channel = network.getChannel();
+                    discoveryService = channel.newDiscoveryService('discovery');
+                    endorsingPeers = channel.getEndorsers();
+                    discoveryRequest = {
+                        target: endorsingPeers[0], // Target the first available endorsing peer
+                        config: true,
+                    };
+                    return [4 /*yield*/, discoveryService.send(discoveryRequest)];
+                case 3:
+                    discoveryResult = _d.sent();
+                    nodes_1 = [];
+                    edges_1 = [];
+                    peers = ((_a = discoveryResult.peers_by_org['Org1MSP']) === null || _a === void 0 ? void 0 : _a.peers) || [];
+                    peers.forEach(function (peer, i) {
+                        nodes_1.push({ id: "peer".concat(i, ".org1"), data: { label: "Peer ".concat(i, " (Org1)") }, position: { x: 100 + i * 400, y: 200 }, style: { background: '#0ea5e9', color: 'white', border: 'none' } });
+                    });
+                    orderers = ((_c = (_b = discoveryResult.orderers) === null || _b === void 0 ? void 0 : _b['OrdererMSP']) === null || _c === void 0 ? void 0 : _c.endpoints) || [];
+                    orderers.forEach(function (orderer, i) {
+                        var ordererId = "orderer".concat(i);
+                        nodes_1.push({ id: ordererId, data: { label: "Orderer ".concat(i) }, position: { x: 300, y: 400 }, style: { background: '#a855f7', color: 'white', border: 'none' } });
+                        nodes_1.filter(function (n) { return n.id.startsWith('peer'); }).forEach(function (peerNode) {
+                            edges_1.push({ id: "edge-".concat(peerNode.id, "-").concat(ordererId), source: peerNode.id, target: ordererId, type: 'step' });
+                        });
+                    });
+                    // Update the global state
+                    networkNodes = nodes_1;
+                    networkEdges = edges_1;
+                    console.log("Discovery complete. Found ".concat(networkNodes.length, " base nodes."));
+                    return [4 /*yield*/, broadcastFullGraphState()];
+                case 4:
+                    _d.sent();
+                    return [3 /*break*/, 6];
+                case 5:
+                    error_2 = _d.sent();
+                    console.error('🔴 Error during network discovery:', error_2);
+                    return [3 /*break*/, 6];
+                case 6: return [2 /*return*/];
+            }
+        });
     });
-});
-// 2. Main Fabric Listener Logic (adapted from your blockListener.ts)
+}
+/**
+ * Main function to set up the gateway connection and listeners.
+ */
 function main() {
     return __awaiter(this, void 0, void 0, function () {
-        var wallet, certPath, cert, keyPath, key, identity, ccpPath, ccp, gateway, network, error_1;
+        var wallet, cert, key, identity, ccp, network, error_3;
         var _this = this;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    _a.trys.push([0, 6, , 7]);
+                    _a.trys.push([0, 7, , 8]);
                     return [4 /*yield*/, fabric_network_1.Wallets.newInMemoryWallet()];
                 case 1:
                     wallet = _a.sent();
-                    certPath = path.resolve(__dirname, '..', 'fabric_config', 'org1-admin-cert.pem');
-                    cert = fs.readFileSync(certPath, 'utf8');
-                    keyPath = path.resolve(__dirname, '..', 'fabric_config', 'org1-admin-key.pem');
-                    key = fs.readFileSync(keyPath, 'utf8');
-                    identity = {
-                        credentials: { certificate: cert, privateKey: key },
-                        mspId: 'Org1MSP',
-                        type: 'X.509',
-                    };
+                    cert = fs.readFileSync(path.resolve(__dirname, '..', 'fabric_config', 'org1-admin-cert.pem'), 'utf8');
+                    key = fs.readFileSync(path.resolve(__dirname, '..', 'fabric_config', 'org1-admin-key.pem'), 'utf8');
+                    identity = { credentials: { certificate: cert, privateKey: key }, mspId: 'Org1MSP', type: 'X.509' };
                     return [4 /*yield*/, wallet.put('Org1Admin', identity)];
                 case 2:
                     _a.sent();
-                    ccpPath = path.resolve(__dirname, '..', 'fabric_config', 'connection-org1.json');
-                    ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
+                    ccp = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'fabric_config', 'connection-org1.json'), 'utf8'));
                     gateway = new fabric_network_1.Gateway();
-                    return [4 /*yield*/, gateway.connect(ccp, {
-                            wallet: wallet,
-                            identity: 'Org1Admin',
-                            discovery: { enabled: true, asLocalhost: true }
-                        })];
+                    return [4 /*yield*/, gateway.connect(ccp, { wallet: wallet, identity: 'Org1Admin', discovery: { enabled: true, asLocalhost: true } })];
                 case 3:
                     _a.sent();
                     return [4 /*yield*/, gateway.getNetwork('mychannel')];
                 case 4:
                     network = _a.sent();
-                    // Register the block listener
+                    // The block listener now simply triggers a full graph state refresh.
                     return [4 /*yield*/, network.addBlockListener(function (event) { return __awaiter(_this, void 0, void 0, function () {
-                            var blockNumber, _i, _a, tx, payload, txId;
-                            var _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
-                            return __generator(this, function (_o) {
-                                blockNumber = event.blockNumber.toString();
-                                if ('data' in event.blockData) {
-                                    for (_i = 0, _a = (_c = (_b = event.blockData.data) === null || _b === void 0 ? void 0 : _b.data) !== null && _c !== void 0 ? _c : []; _i < _a.length; _i++) {
-                                        tx = _a[_i];
-                                        payload = (_j = (_h = (_g = (_f = (_e = (_d = tx === null || tx === void 0 ? void 0 : tx.payload) === null || _d === void 0 ? void 0 : _d.data) === null || _e === void 0 ? void 0 : _e.actions[0]) === null || _f === void 0 ? void 0 : _f.payload) === null || _g === void 0 ? void 0 : _g.action) === null || _h === void 0 ? void 0 : _h.proposal_response_payload) === null || _j === void 0 ? void 0 : _j.extension;
-                                        txId = (_m = (_l = (_k = tx === null || tx === void 0 ? void 0 : tx.payload) === null || _k === void 0 ? void 0 : _k.header) === null || _l === void 0 ? void 0 : _l.channel_header) === null || _m === void 0 ? void 0 : _m.tx_id;
-                                        if (payload && txId) {
-                                            // Instead of console.log, we now broadcast the event
-                                            broadcast({
-                                                type: 'NEW_TRANSACTION',
-                                                blockNumber: blockNumber,
-                                                txId: txId,
-                                                chaincode: payload.chaincode_id.name,
-                                                timestamp: new Date().toISOString()
-                                            });
-                                        }
-                                    }
+                            return __generator(this, function (_a) {
+                                switch (_a.label) {
+                                    case 0:
+                                        console.log("\uD83D\uDE80 New Block Detected! Block Number: ".concat(event.blockNumber, ". Triggering graph update."));
+                                        return [4 /*yield*/, broadcastFullGraphState()];
+                                    case 1:
+                                        _a.sent();
+                                        return [2 /*return*/];
                                 }
-                                return [2 /*return*/];
                             });
                         }); })];
                 case 5:
-                    // Register the block listener
+                    // The block listener now simply triggers a full graph state refresh.
                     _a.sent();
-                    console.log('✅ Fabric listener registered. Listening for new block events...');
-                    return [3 /*break*/, 7];
+                    console.log('✅ Fabric listener registered.');
+                    // Run discovery on startup and then periodically.
+                    return [4 /*yield*/, discoverNetwork()];
                 case 6:
-                    error_1 = _a.sent();
-                    console.error("\uD83D\uDD34 Failed to run the Fabric listener: ".concat(error_1));
+                    // Run discovery on startup and then periodically.
+                    _a.sent();
+                    setInterval(discoverNetwork, 60000); // Refresh network map every minute
+                    return [3 /*break*/, 8];
+                case 7:
+                    error_3 = _a.sent();
+                    console.error("\uD83D\uDD34 Fatal error in main function: ".concat(error_3));
                     process.exit(1);
-                    return [3 /*break*/, 7];
-                case 7: return [2 /*return*/];
+                    return [3 /*break*/, 8];
+                case 8: return [2 /*return*/];
             }
         });
     });
 }
-// Start the Fabric listener after setting up the WebSocket server
+// When a new browser connects, immediately send it the current graph state.
+wss.on('connection', function () {
+    console.log('🔗 New client connected. Sending current graph state.');
+    broadcastFullGraphState();
+});
 main();

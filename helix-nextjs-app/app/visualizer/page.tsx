@@ -164,19 +164,31 @@ export default function VisualizerPage() {
         return () => socket.close();
     }, []);
 
+    // --- MODIFIED: This function now runs the simulation ---
     const handleTestTransaction = async () => {
         if (isAnimating) return;
-        setLastEvent(null);
-        await fetch('/api/records', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                recordID: 'REC_' + Math.floor(Math.random() * 1000),
-                patientID: 'GraphTestPatient',
-                recordType: 'GraphTest',
-                recordDataHash: 'graph_test_hash_' + Date.now(),
-            }),
-        });
+        setIsAnimating(true);
+        
+        // 1. Create a fake transaction ID for the simulation
+        const fakeTxId = (Math.random() + 1).toString(36).substring(2);
+        const fakeEvent = {
+            type: 'SIMULATED_TRANSACTION',
+            txId: fakeTxId,
+            chaincode: 'helixcc',
+            note: 'This is a frontend simulation.'
+        };
+        setLastEvent(fakeEvent);
+
+        // 2. Run the helix animation
+        await startAnimationSequence();
+
+        // 3. Run the temporary node animation on the graph
+        await animateTransactionOnGraph(fakeTxId);
+
+        // Note: This does not call updateGraphWithRecords, so no new permanent
+        // record will be added to the graph, completing the simulation.
+        
+        setIsAnimating(false);
     };
 
     const handleNodeClick = (event: React.MouseEvent, node: Node) => {
