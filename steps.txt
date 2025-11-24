@@ -84,8 +84,6 @@ stuff that your laptop needs:
 - npm
 - npm install @hyperledger/fabric-gateway @grpc/grpc-js
 npm install framer-motion react-icons
-npx tsc listeners/blockListener.ts
-node listeners/blockListener.js
 npm install ws
 npm install -D @types/ws
 npm install reactflow
