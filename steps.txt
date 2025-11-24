@@ -1,0 +1,92 @@
+Step 1:
+open a wsl terminal and docker desktop
+
+Step 2:
+cd to blockchain/fabric-samples/test-network
+
+Step 3:
+./network.sh down
+
+Step 4:
+./network.sh up createChannel
+
+Step 5:
+./network.sh deployCC -ccn helixcc -ccp ../chaincode/helix/ -ccl go
+
+Step 6:
+copy chaincode code package identifier in the output of step 5.
+example line of code: Chaincode code package identifier: helixcc_1.0:17bd74ad5066e31f10de1b3c462416d59cbd3ec2e9801c58cb827dddb4b84d57
+
+Step 7:
+# Set environment for Org1
+export CORE_PEER_LOCALMSPID="Org1MSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+export CORE_PEER_ADDRESS=localhost:7051
+
+Step 8:
+replace package id from step 6 in this command
+
+peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem" -C mychannel -n helixcc --version 1.0 --package-id "PASTE_YOUR_NEW_PACKAGE_ID_HERE" --sequence 2 --collections-config ../chaincode/helix/collections_config.json --signature-policy "OR('Org1MSP.peer', 'Org2MSP.peer')"
+
+Step 9:
+# Set environment for Org2
+export CORE_PEER_LOCALMSPID="Org2MSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+export CORE_PEER_ADDRESS=localhost:9051
+
+Step 10:
+replace package id from step 6 in this command
+
+peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem" -C mychannel -n helixcc --version 1.0 --package-id "PASTE_YOUR_NEW_PACKAGE_ID_HERE" --sequence 2 --collections-config ../chaincode/helix/collections_config.json --signature-policy "OR('Org1MSP.peer', 'Org2MSP.peer')"
+
+Step 11:
+peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile "${PWD}/organizations/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem" -C mychannel -n helixcc --version 1.0 --sequence 2 --collections-config ../chaincode/helix/collections_config.json --signature-policy "OR('Org1MSP.peer', 'Org2MSP.peer')" --peerAddresses localhost:7051 --tlsRootCertFiles "${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt" --peerAddresses localhost:9051 --tlsRootCertFiles "${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt"
+
+Step 12:
+copy all these files below into helix-nextjs-app/fabric_config and rename them accordingly.
+
+fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/connection-org1.json - 'connection-org1.json'
+fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/signcerts/cert.pem - 'org1-admin-cert.pem'
+fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/ - 'org1-admin-key.pem'
+fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem - 'org1-ca.crt'
+fabric-samples/test-network/organizations/peerOrganizations/org2.example.com/connection-org2.json - 'connection-org2.json'
+fabric-samples/test-network/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp/signcerts/cert.pem - 'org2-admin-cert.pem'
+fabric-samples/test-network/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp/keystore/ - 'org2-admin-key.pem'
+fabric-samples/test-network/organizations/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem - 'org2-ca.crt'
+
+Step 13:
+open a powershell terminal
+
+Step 14:
+cd helix-nextjs-app
+
+Step 15:
+npm run dev
+
+Step 16:
+to shut down the network
+
+./network.sh down
+
+once you shut down the network, the entire process needs to be repeated.
+
+-------------------------------------------
+stuff that your laptop needs:
+- wsl2 running ubuntu
+- git
+- cURL
+- jq
+- docker
+- golang
+- node.js
+- npm
+- npm install @hyperledger/fabric-gateway @grpc/grpc-js
+npm install framer-motion react-icons
+npx tsc listeners/blockListener.ts
+node listeners/blockListener.js
+npm install ws
+npm install -D @types/ws
+npm install reactflow
+
